@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.forest.weather";
+option java_outer_classname = "WeatherProto";
+
+// Weather Monitoring Service
+// Covers: Unary RPC + Server Streaming RPC
+service WeatherService {
+
+  // RPC1: Unary - Get current weather for a specific zone
+  rpc GetWeatherStatus (WeatherRequest) returns (WeatherResponse);
+
+  // RPC2: Server Streaming - Stream live weather updates for a duration
+  rpc StreamWeatherUpdates (WeatherStreamRequest) returns (stream WeatherResponse);
+}
+
+// Request message for GetWeatherStatus
+message WeatherRequest {
+  string zone_id = 1;  // e.g. "ZONE_A", "ZONE_B"
+}
+
+// Request message for StreamWeatherUpdates
+message WeatherStreamRequest {
+  string zone_id = 1;   // Zone to monitor
+  int32 duration = 2;   // How many updates to stream
+}
+
+// Response message - weather data
+message WeatherResponse {
+  string zone_id = 1;
+  float temperature = 2;    // degrees Celsius
+  float wind_speed = 3;     // km/h
+  float humidity = 4;       // percentage
+  float rainfall = 5;       // mm
+  string timestamp = 6;     // time of reading
+  string status = 7;        // e.g. "NORMAL", "WARNING"
+}
+
