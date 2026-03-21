@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.forest.firerisk";
+option java_outer_classname = "FireRiskProto";
+
+// Fire Risk Assessment Service
+// Covers: Unary RPC
+service FireRiskService {
+
+  // RPC3: Unary - Assess fire risk based on environmental data
+  rpc AssessFireRisk (FireRiskRequest) returns (FireRiskResponse);
+}
+
+// Risk level enum
+enum RiskLevel {
+  LOW = 0;
+  MEDIUM = 1;
+  HIGH = 2;
+  EXTREME = 3;
+}
+
+// Request - environmental sensor data sent by client
+message FireRiskRequest {
+  float temperature = 1;   // degrees Celsius
+  float wind_speed = 2;    // km/h
+  float humidity = 3;      // percentage
+  float smoke_level = 4;   // smoke density level
+  string zone_id = 5;      // which forest zone
+}
+
+// Response - risk assessment result from server
+message FireRiskResponse {
+  RiskLevel risk_level = 1;   // LOW, MEDIUM, HIGH, EXTREME
+  float risk_score = 2;       // numerical score 0-100
+  string recommendation = 3;  // e.g. "Monitor closely", "Evacuate immediately"
+  string zone_id = 4;
+  string timestamp = 5;
+}
+

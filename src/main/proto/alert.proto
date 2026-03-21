@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.forest.alert";
+option java_outer_classname = "AlertProto";
+
+// Emergency Alert Service
+// Covers: Client Streaming RPC + Bidirectional Streaming RPC
+service AlertService {
+
+  // RPC4: Client Streaming - Client uploads multiple sensor readings
+  // Server returns a summary report once all readings are received
+  rpc UploadSensorReadings (stream SensorReading) returns (SensorReport);
+
+  // RPC5: Bidirectional Streaming - Real time two-way communication
+  // Client sends alert events, server responds with commands immediately
+  rpc MonitorAlerts (stream AlertEvent) returns (stream AlertCommand);
+}
+
+// A single sensor reading uploaded by the client
+message SensorReading {
+  float smoke_reading = 1;        // smoke density
+  float temperature_reading = 2;  // degrees Celsius
+  string zone_id = 3;
+  string timestamp = 4;
+}
+
+// Summary report returned after client streaming completes
+message SensorReport {
+  float average_smoke_level = 1;
+  float max_smoke_level = 2;
+  float average_temperature = 3;
+  float max_temperature = 4;
+  bool alert_flag = 5;            // true if dangerous thresholds exceeded
+  string summary = 6;             // human readable summary
+}
+
+// Alert event sent by client in bidirectional stream
+message AlertEvent {
+  string zone_id = 1;
+  string event_type = 2;    // e.g. "SMOKE_DETECTED", "HIGH_TEMP", "FIRE_SPOTTED"
+  float severity = 3;       // 0.0 - 10.0
+  string timestamp = 4;
+}
+
+// Command sent back by server in bidirectional stream
+message AlertCommand {
+  string zone_id = 1;
+  string command = 2;       // "WARNING", "DISPATCH_TEAM", "EVACUATE", "CLEAR_ALERT"
+  string message = 3;       // detailed instruction
+  string timestamp = 4;
+}
+
