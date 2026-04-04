@@ -5,7 +5,6 @@ option java_package = "com.forest.weather";
 option java_outer_classname = "WeatherProto";
 
 // Weather Monitoring Service
-// Covers: Unary RPC + Server Streaming RPC
 service WeatherService {
 
   // RPC1: Unary - Get current weather for a specific zone
