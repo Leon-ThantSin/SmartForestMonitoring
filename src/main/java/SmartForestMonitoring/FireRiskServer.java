@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Random;
  
 public class FireRiskServer extends FireRiskServiceGrpc.FireRiskServiceImplBase {
  
@@ -25,31 +24,18 @@ public class FireRiskServer extends FireRiskServiceGrpc.FireRiskServiceImplBase 
     private static final String SERVICE_NAME = "FireRiskService";
     private static JmDNS jmdns;
  
-    // ========== FULLY RANDOM DATA GENERATION ==========
-    // Generates random environmental data for any zone
-    private float[] getZoneProfile(String zoneId) {
-        Random rand = new Random();
-        return new float[]{
-            20 + rand.nextFloat() * 25,   // temp 20-45°C
-            5 + rand.nextFloat() * 55,    // wind 5-60 km/h
-            15 + rand.nextFloat() * 75,   // humidity 15-90%
-            rand.nextFloat() * 10         // smoke 0-10
-        };
-    }
- 
     // ========== UNARY RPC ==========
     @Override
     public void assessFireRisk(FireRiskRequest request, StreamObserver<FireRiskResponse> responseObserver) {
         System.out.println("FireRiskServer: AssessFireRisk called for zone: " + request.getZoneId());
  
-        // Auto-generate random environmental data for the zone
-        float[] profile = getZoneProfile(request.getZoneId());
-        float temperature = profile[0];
-        float windSpeed   = profile[1];
-        float humidity    = profile[2];
-        float smokeLevel  = profile[3];
+        // Read environmental data sent by the client
+        float temperature = request.getTemperature();
+        float windSpeed   = request.getWindSpeed();
+        float humidity    = request.getHumidity();
+        float smokeLevel  = request.getSmokeLevel();
  
-        System.out.println("  Auto-generated data for [" + request.getZoneId() + "]"
+        System.out.println("  Received data for [" + request.getZoneId() + "]"
                 + " -> Temp: "     + String.format("%.1f", temperature) + "°C"
                 + " | Wind: "      + String.format("%.1f", windSpeed)   + " km/h"
                 + " | Humidity: "  + String.format("%.1f", humidity)    + "%"
@@ -84,16 +70,16 @@ public class FireRiskServer extends FireRiskServiceGrpc.FireRiskServiceImplBase 
  
         if (score >= 80) {
             level = RiskLevel.EXTREME;
-            recommendation = "🔴 EXTREME DANGER! Evacuate immediately! Deploy all emergency units!";
+            recommendation = "EXTREME DANGER! Evacuate immediately! Deploy all emergency units!";
         } else if (score >= 60) {
             level = RiskLevel.HIGH;
-            recommendation = "🟠 HIGH RISK! Dispatch fire teams to zone " + request.getZoneId() + " immediately!";
+            recommendation = "HIGH RISK! Dispatch fire teams to zone " + request.getZoneId() + " immediately!";
         } else if (score >= 40) {
             level = RiskLevel.MEDIUM;
-            recommendation = "🟡 MEDIUM RISK. Monitor closely. Prepare response teams for zone " + request.getZoneId();
+            recommendation = "MEDIUM RISK. Monitor closely. Prepare response teams for zone " + request.getZoneId();
         } else {
             level = RiskLevel.LOW;
-            recommendation = "🟢 LOW RISK. Situation normal in zone " + request.getZoneId() + ". Continue monitoring.";
+            recommendation = "LOW RISK. Situation normal in zone " + request.getZoneId() + ". Continue monitoring.";
         }
  
         System.out.println("  Risk Score: " + score + " -> " + level);
