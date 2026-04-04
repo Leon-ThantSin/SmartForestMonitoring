@@ -5,7 +5,6 @@ option java_package = "com.forest.alert";
 option java_outer_classname = "AlertProto";
 
 // Emergency Alert Service
-// Covers: Client Streaming RPC + Bidirectional Streaming RPC
 service AlertService {
 
   // RPC4: Client Streaming - Client uploads multiple sensor readings
