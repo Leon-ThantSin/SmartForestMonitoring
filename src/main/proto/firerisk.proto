@@ -5,7 +5,6 @@ option java_package = "com.forest.firerisk";
 option java_outer_classname = "FireRiskProto";
 
 // Fire Risk Assessment Service
-// Covers: Unary RPC
 service FireRiskService {
 
   // RPC3: Unary - Assess fire risk based on environmental data
