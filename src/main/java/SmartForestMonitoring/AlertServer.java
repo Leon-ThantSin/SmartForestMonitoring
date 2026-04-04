@@ -11,6 +11,7 @@ import com.forest.alert.AlertCommand;
 import com.forest.alert.AlertServiceGrpc;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
@@ -27,7 +28,9 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
 
     // ========== CLIENT STREAMING RPC ==========
     @Override
-    public StreamObserver<SensorReading> uploadSensorReadings(StreamObserver<SensorReport> responseObserver) {
+    public StreamObserver<SensorReading> uploadSensorReadings(
+            StreamObserver<SensorReport> responseObserver) {
+
         System.out.println("AlertServer: UploadSensorReadings stream started");
 
         return new StreamObserver<SensorReading>() {
@@ -37,24 +40,53 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
 
             @Override
             public void onNext(SensorReading reading) {
-                System.out.println("AlertServer: Received reading - Smoke: " + reading.getSmokeReading()
+                // Input validation — reject negative sensor values
+                if (reading.getSmokeReading() < 0 || reading.getTemperatureReading() < 0) {
+                    responseObserver.onError(Status.INVALID_ARGUMENT
+                            .withDescription("Sensor readings cannot be negative")
+                            .asRuntimeException());
+                    return;
+                }
+
+                System.out.println("AlertServer: Received reading - Smoke: "
+                        + reading.getSmokeReading()
                         + " Temp: " + reading.getTemperatureReading());
+
                 totalSmoke += reading.getSmokeReading();
-                totalTemp += reading.getTemperatureReading();
-                if (reading.getSmokeReading() > maxSmoke) maxSmoke = reading.getSmokeReading();
-                if (reading.getTemperatureReading() > maxTemp) maxTemp = reading.getTemperatureReading();
+                totalTemp  += reading.getTemperatureReading();
+                if (reading.getSmokeReading() > maxSmoke)
+                    maxSmoke = reading.getSmokeReading();
+                if (reading.getTemperatureReading() > maxTemp)
+                    maxTemp = reading.getTemperatureReading();
                 count++;
             }
 
             @Override
             public void onError(Throwable t) {
-                System.err.println("AlertServer: Error in sensor upload: " + t.getMessage());
+                // Log with gRPC status code if available
+                if (t instanceof io.grpc.StatusRuntimeException) {
+                    io.grpc.StatusRuntimeException sre = (io.grpc.StatusRuntimeException) t;
+                    System.err.println("AlertServer: Stream error ["
+                            + sre.getStatus().getCode() + "]: "
+                            + sre.getStatus().getDescription());
+                } else {
+                    System.err.println("AlertServer: Error in sensor upload: "
+                            + t.getMessage());
+                }
             }
 
             @Override
             public void onCompleted() {
-                float avgSmoke = count > 0 ? totalSmoke / count : 0;
-                float avgTemp = count > 0 ? totalTemp / count : 0;
+                // Guard against empty stream
+                if (count == 0) {
+                    responseObserver.onError(Status.INVALID_ARGUMENT
+                            .withDescription("No sensor readings were uploaded")
+                            .asRuntimeException());
+                    return;
+                }
+
+                float avgSmoke = totalSmoke / count;
+                float avgTemp  = totalTemp  / count;
                 boolean alertFlag = avgSmoke > 5 || avgTemp > 38;
 
                 SensorReport report = SensorReport.newBuilder()
@@ -63,7 +95,9 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
                         .setAverageTemperature(avgTemp)
                         .setMaxTemperature(maxTemp)
                         .setAlertFlag(alertFlag)
-                        .setSummary(alertFlag ? "⚠️ ALERT: Dangerous levels detected!" : "✅ All readings within safe limits.")
+                        .setSummary(alertFlag
+                                ? "ALERT: Dangerous levels detected!"
+                                : "All readings within safe limits.")
                         .build();
 
                 responseObserver.onNext(report);
@@ -75,16 +109,26 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
 
     // ========== BIDIRECTIONAL STREAMING RPC ==========
     @Override
-    public StreamObserver<AlertEvent> monitorAlerts(StreamObserver<AlertCommand> responseObserver) {
+    public StreamObserver<AlertEvent> monitorAlerts(
+            StreamObserver<AlertCommand> responseObserver) {
+
         System.out.println("AlertServer: MonitorAlerts bidirectional stream started");
 
         return new StreamObserver<AlertEvent>() {
             @Override
             public void onNext(AlertEvent event) {
-                System.out.println("AlertServer: Received alert event - " + event.getEventType()
-                        + " in zone " + event.getZoneId());
+                System.out.println("AlertServer: Received alert event - "
+                        + event.getEventType() + " in zone " + event.getZoneId());
 
-                // Determine command based on event type and severity
+                // Input validation — reject empty zone
+                if (event.getZoneId() == null || event.getZoneId().isEmpty()) {
+                    responseObserver.onError(Status.INVALID_ARGUMENT
+                            .withDescription("Zone ID cannot be empty in alert event")
+                            .asRuntimeException());
+                    return;
+                }
+
+                // Determine command based on severity level
                 String command;
                 String message;
                 if (event.getSeverity() >= 8) {
@@ -95,7 +139,8 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
                     message = "Fire team dispatched to zone " + event.getZoneId();
                 } else if (event.getSeverity() >= 3) {
                     command = "WARNING";
-                    message = "Warning issued for zone " + event.getZoneId() + ". Monitor closely.";
+                    message = "Warning issued for zone " + event.getZoneId()
+                            + ". Monitor closely.";
                 } else {
                     command = "CLEAR_ALERT";
                     message = "Zone " + event.getZoneId() + " is clear. No action needed.";
@@ -105,7 +150,8 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
                         .setZoneId(event.getZoneId())
                         .setCommand(command)
                         .setMessage(message)
-                        .setTimestamp(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                        .setTimestamp(LocalDateTime.now().format(
+                                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
                         .build();
 
                 responseObserver.onNext(alertCommand);
@@ -113,7 +159,15 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
 
             @Override
             public void onError(Throwable t) {
-                System.err.println("AlertServer: Error in monitor alerts: " + t.getMessage());
+                if (t instanceof io.grpc.StatusRuntimeException) {
+                    io.grpc.StatusRuntimeException sre = (io.grpc.StatusRuntimeException) t;
+                    System.err.println("AlertServer: BiDi stream error ["
+                            + sre.getStatus().getCode() + "]: "
+                            + sre.getStatus().getDescription());
+                } else {
+                    System.err.println("AlertServer: Error in monitor alerts: "
+                            + t.getMessage());
+                }
             }
 
             @Override
@@ -134,7 +188,8 @@ public class AlertServer extends AlertServiceGrpc.AlertServiceImplBase {
                 "Emergency Alert Service"
         );
         jmdns.registerService(serviceInfo);
-        System.out.println("AlertServer: Registered with Naming Service as '" + SERVICE_NAME + "'");
+        System.out.println("AlertServer: Registered with Naming Service as '"
+                + SERVICE_NAME + "'");
     }
 
     // ========== MAIN ==========
